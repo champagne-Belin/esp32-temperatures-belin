@@ -1,0 +1,6 @@
+# Ne jamais committer les identifiants réels
+secrets.h
+
+# Fichiers Arduino IDE temporaires
+*.tmp
+build/
