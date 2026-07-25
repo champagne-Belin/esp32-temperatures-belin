@@ -1,7 +1,8 @@
 // ============================================================
 //  BELIN ELECTRONIQUE — MODULE TEMPERATURE (DHT22 uniquement)
 //  Module : habillage
-//  WiFi fallback 3 réseaux, OTA GitHub, envoi Sheet 3x/jour
+//  WiFi fallback multi-réseaux, OTA GitHub, envoi Sheet 3x/jour
+//  + Température/Humidité live toutes les 60s (site web)
 //  Fonctionnement en continu (pas de deep sleep) pour LED live
 // ============================================================
 
@@ -38,15 +39,17 @@ const int HEURES_CIBLES[] = {4, 12, 20};
 const int NB_CIBLES = 3;
 int derniereHeureEnvoyee = -1;
 
-// ── ETAT LED ET MESURE ────────────────────────────────────────
+// ── ETAT LED ET MESURE ───────────────────────────────────────
 #define INTERVALLE_CLIGNOTEMENT 150
 #define INTERVALLE_MESURE       2000
+#define INTERVALLE_LIVE         60000  // 60 secondes
 
 unsigned long dernierClignotementTemp = 0;
 bool etatLedBleue = false;
 unsigned long derniereTentativeWifi = 0;
 #define DELAI_RETRY_WIFI 60000
 unsigned long derniereMesure = 0;
+unsigned long dernierEnvoiLive = 0;
 bool tempAlerte = false;
 
 bool connecterWifi() {
@@ -126,6 +129,18 @@ void envoyerMesure(float temp, float humi) {
   http.end();
 }
 
+// ── LIVE (température + humidité, toutes les 60s, pour le site web) ──
+void envoyerLive(float temp, float humi) {
+  HTTPClient http;
+  String url = String(SCRIPT_URL) + "?action=live&module=" NOM_MODULE
+               + "&temp=" + String(temp, 1)
+               + "&humi=" + String(humi, 1);
+  http.begin(url);
+  http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+  int code = http.GET();
+  http.end();
+}
+
 void setup() {
   Serial.begin(115200);
   delay(500);
@@ -157,6 +172,11 @@ void loop() {
     tempAlerte = (isnan(temp) || isnan(humi)
                   || temp < tempMin || temp > tempMax
                   || humi < humMin  || humi > humMax);
+
+    if (millis() - dernierEnvoiLive > INTERVALLE_LIVE) {
+      envoyerLive(temp, humi);
+      dernierEnvoiLive = millis();
+    }
 
     struct tm timeinfo;
     if (getLocalTime(&timeinfo, 100)) {
